@@ -1,84 +1,82 @@
 import tensorflow as tf
+import os
 import matplotlib.pyplot as plt
 import argparse
-
-
-# hyperparameters
-BATCH_SIZE = 32
-IMG_HEIGHT = 224
-IMG_WEIGHT = 224
-EPOCHS = 20
-NUM_CLASSES = 3
-CHECKPOINT_PATH = "checkpoints/cp.ckpt"
-
-# preprocess
-train_datagen = tf.keras.preprocessing.image.ImageDataGenerator()
-val_datagen = tf.keras.preprocessing.image.ImageDataGenerator()
-test_datagen = tf.keras.preprocessing.image.ImageDataGenerator()
-
-train_generator = train_datagen.flow_from_directory(
-    'data/train',
-    target_size=(IMG_HEIGHT, IMG_WEIGHT),
-    batch_size=BATCH_SIZE,
-    class_mode='sparse')
-val_generator = val_datagen.flow_from_directory(
-    'data/val',
-    target_size=(IMG_HEIGHT, IMG_WEIGHT),
-    batch_size=BATCH_SIZE,
-    class_mode='sparse')
-test_generator = test_datagen.flow_from_directory(
-    'data/test',
-    target_size=(IMG_HEIGHT, IMG_WEIGHT),
-    batch_size=BATCH_SIZE,
-    class_mode='sparse')
-
-
-# model
-VGG16_MODEL = tf.keras.applications.VGG16()
-VGG16_MODEL.trainable = False
-
-model = tf.keras.Sequential([
-
-    VGG16_MODEL,
-    tf.keras.layers.BatchNormalization(),
-    tf.keras.layers.Dense(NUM_CLASSES, activation='softmax')
-])
+from preprocess import Datasets
+from models import SegNet, ChamferDistance
+import hyperparameters as hp
+import wget
 
 
 def train(model, train_data, val_data):
     """ Training routine. """
-    cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=CHECKPOINT_PATH,
-                                                     monitor='val_accuracy',
-                                                     save_best_only=True,
+
+    cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=hp.CHECKPOINT_PATH,
+                                                     monitor='val_loss',
+                                                     save_best_only=False,
                                                      save_weights_only=True,
                                                      verbose=0)
 
     model.fit(
         train_data,
         validation_data=val_data,
-        epochs=EPOCHS,
+        epochs=hp.EPOCHS,
         callbacks=[cp_callback]
     )
 
 
-def test(model, test_data):
+def test(model, test_data, checkpoint):
     """ Testing routine. """
-    model.load_weights(CHECKPOINT_PATH)
+
+    model.load_weights(checkpoint)
     # Run model on test set
-    loss, acc = model.evaluate(
+    loss, chamfer = model.evaluate(
         x=test_data,
         verbose=1,
     )
-    print("Restored model, accuracy: {:5.2f}%".format(100 * acc))
 
-    class_names = ['circle', 'rectangle', 'triangle']
-    plt.figure(figsize=(10, 10))
-    images, labels = next(test_data)
+    images, labels = iter(test_data).get_next()[
+        0], iter(test_data).get_next()[1]
 
-    for i in range(9):
-        ax = plt.subplot(3, 3, i + 1)
-        plt.imshow(images[i].astype("uint8"))
-        plt.title(class_names[int(labels[i])])
+    predictions = model.predict(images)
+
+    for i in range(hp.BATCH_SIZE):
+
+        plt.subplot(hp.BATCH_SIZE, 7, 1+7*i)
+        plt.axis('off')
+        plt.imshow(images[i])
+        plt.title('Input Views')
+
+        plt.subplot(hp.BATCH_SIZE, 7, 2+7*i)
+        plt.axis('off')
+        plt.imshow(predictions[i, :, :, 0:3])
+        plt.title('NOCS (Prediction)')
+
+        plt.subplot(hp.BATCH_SIZE, 7, 3+7*i)
+        plt.axis('off')
+        plt.imshow(labels[i, :, :, 0:3])
+        plt.title('NOCS (Gound Truth)')
+
+        plt.subplot(hp.BATCH_SIZE, 7, 4+7*i)
+        plt.axis('off')
+        plt.imshow(predictions[i, :, :, 3:6])
+        plt.title('X-NOCS (Prediction)')
+
+        plt.subplot(hp.BATCH_SIZE, 7, 5+7*i)
+        plt.axis('off')
+        plt.imshow(labels[i, :, :, 3:6])
+        plt.title('X-NOCS (Gound Truth)')
+
+        plt.subplot(hp.BATCH_SIZE, 7, 6+7*i)
+        plt.axis('off')
+        plt.imshow(predictions[i, :, :, 6:9])
+        plt.title('Depth Peeling (Prediction)')
+
+        plt.subplot(hp.BATCH_SIZE, 7, 7+7*i)
+        plt.axis('off')
+        plt.imshow(labels[i, :, :, 6:9])
+        plt.title('Depth Peeling (Gound Truth)')
+
     plt.show()
 
 
@@ -91,9 +89,16 @@ def parse_args():
 
     parser.add_argument(
         '--test',
-        action='store_true',
+        default=None,
         help='''Skips training and evaluates on the test set once.''')
-
+    parser.add_argument(
+        '--load-vgg',
+        default='vgg16_weights_tf_dim_ordering_tf_kernels_notop.h5',
+        help='''Path to pre-trained VGG-16 file.''')
+    parser.add_argument(
+        '--load-checkpoint',
+        default=None,
+        help='''Path to start checkpoint.''')
     return parser.parse_args()
 
 
@@ -103,17 +108,37 @@ ARGS = parse_args()
 
 def main():
     """ Main function. """
+    datasets = Datasets()
+
+    if ARGS.load_vgg:
+        if not os.path.exists(ARGS.load_vgg):
+            wget.download(
+                "https://github.com/fchollet/deep-learning-models/releases/download/v0.1/vgg16_weights_tf_dim_ordering_tf_kernels_notop.h5")
+        ARGS.load_vgg = os.path.abspath(ARGS.load_vgg)
+        model = SegNet(out_channels=9, load_vgg=True)
+        model(tf.keras.Input(shape=(480, 640, 3)))
+
+        model.encoder.load_weights(ARGS.load_vgg, by_name=True)
+    else:
+        model = SegNet(out_channels=9, load_vgg=False)
+        model(tf.keras.Input(shape=(480, 640, 3)))
+
+    if ARGS.load_checkpoint:
+        ARGS.load_checkpoint = os.path.abspath(ARGS.load_checkpoint)
+        model.load_weights(ARGS.load_checkpoint, by_name=False)
+
     model.summary()
     model.compile(
-        optimizer='adam',
-        loss=tf.losses.SparseCategoricalCrossentropy(),
-        metrics=['accuracy'])
-
+        optimizer=model.optimizer,
+        loss=model.loss_fn,
+        metrics=[ChamferDistance()])
     if ARGS.test:
-        test(model, test_generator)
+
+        ARGS.test = os.path.abspath(ARGS.test)
+        test(model, datasets.test_data, ARGS.test)
 
     else:
-        train(model, train_generator, val_generator)
+        train(model, datasets.train_data, datasets.val_data)
 
 
 if __name__ == "__main__":
