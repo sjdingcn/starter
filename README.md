@@ -6,7 +6,7 @@ Predicting canonical NOCS map from images similar to [this paper](https://github
 
     python3 run.py
 
-## Train models with pre-trained wights
+## Train models with pre-trained weights
 
     python3 run.py --load-vgg <VGG16 PRE-TRAINED WEIGHT PATH>
 
