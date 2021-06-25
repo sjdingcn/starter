@@ -29,7 +29,7 @@ def test(model, test_data, checkpoint):
     """ Testing routine. """
 
     model.load_weights(checkpoint)
-    # Run model on test set
+    # Run model on test dataset
     loss, chamfer = model.evaluate(
         x=test_data,
         verbose=1,

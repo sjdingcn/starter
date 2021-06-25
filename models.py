@@ -29,7 +29,7 @@ class MaxUpPool2DWithIndices(Layer):
         input, indices = inputs[0], inputs[1]
         input_size = tf.size(input)
         input_shape = tf.shape(input, out_type="int32")
-        # print(input)
+
         output_shape = (input_shape[0], input_shape[1]*self.ksize,
                         input_shape[2]*self.ksize, input.shape[3])
 
@@ -49,12 +49,9 @@ class MaxUpPool2DWithIndices(Layer):
         indices_values = tf.reshape(tf.stack([b, y, x, c]), (4, input_size))
         indices_values = tf.transpose(indices_values)
         input_values = tf.reshape(input, [input_size])
-        # print(indices)
-        # print(input)
-        # print(output_shape)
-        # print(input_size)
+        
         output = tf.scatter_nd(indices_values, input_values, output_shape)
-        # print(output)
+        
         return output
 
 
