@@ -1,10 +1,9 @@
 import hyperparameters as hp
-import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 import tensorflow_graphics.nn.loss.chamfer_distance as tfg_chamfer
 from tensorflow.keras.layers import \
-    Conv2D, MaxPool2D, Dropout, Flatten, Dense, Activation, BatchNormalization, Activation, UpSampling2D, Layer
+    Conv2D, Activation, BatchNormalization, Activation, Layer
 tf.config.run_functions_eagerly(True)
 
 
@@ -15,7 +14,7 @@ class MaxPool2DWithArgmax(Layer):
 
     def call(self, inputs):
         output, argmax = tf.nn.max_pool_with_argmax(
-            inputs, ksize=[1, self.ksize, self.ksize, 1], strides=[1, self.ksize, self.ksize, 1], padding='VALID')
+            inputs, ksize=[1,self.ksize,self.ksize,1], strides=[1,self.ksize,self.ksize,1], padding='VALID')
 
         return output, argmax
 
@@ -231,28 +230,24 @@ class ChamferDistance(keras.metrics.Metric):
 
     def update_state(self, y_true, y_pred, sample_weight=None):
         points_num = 8000
-        reshape = (y_true.shape[0], y_true.shape[1]
-                   * y_true.shape[2], y_true.shape[3])
+        reshape = (y_true.shape[0], y_true.shape[1]*y_true.shape[2], y_true.shape[3])
 
         y_true = tf.reshape(y_true, reshape)
         y_pred = tf.reshape(y_pred, reshape)
 
         y_true_eval = tf.concat([y_true[:, :, 0:3], y_true[:, :, 3:6]], axis=1)
         y_pred_eval = tf.concat([y_pred[:, :, 0:3], y_pred[:, :, 3:6]], axis=1)
-
-        choices_true = tf.random.shuffle(
-            tf.range(y_true_eval.shape[1]))[:points_num]
-        choices_pred = tf.random.shuffle(
-            tf.range(y_pred_eval.shape[1]))[:points_num]
+        
+        choices_true = tf.random.shuffle(tf.range(y_true_eval.shape[1]))[:points_num]
+        choices_pred = tf.random.shuffle(tf.range(y_pred_eval.shape[1]))[:points_num]
 
         y_true_eval = tf.gather(y_true_eval, choices_true, axis=1)
         y_pred_eval = tf.gather(y_pred_eval, choices_pred, axis=1)
-
-        self.chamfer = tf.reduce_mean(
-            tfg_chamfer.evaluate(y_true_eval, y_pred_eval))*100
+        
+        self.chamfer = tf.reduce_mean(tfg_chamfer.evaluate(y_true_eval, y_pred_eval))*100
 
     def result(self):
-
+        
         return self.chamfer
 
     def reset_states(self):

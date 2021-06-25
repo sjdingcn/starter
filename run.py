@@ -34,6 +34,7 @@ def test(model, test_data, checkpoint):
         x=test_data,
         verbose=1,
     )
+    
 
     images, labels = iter(test_data).get_next()[
         0], iter(test_data).get_next()[1]
@@ -123,6 +124,7 @@ def main():
         model = SegNet(out_channels=9, load_vgg=False)
         model(tf.keras.Input(shape=(480, 640, 3)))
 
+        
     if ARGS.load_checkpoint:
         ARGS.load_checkpoint = os.path.abspath(ARGS.load_checkpoint)
         model.load_weights(ARGS.load_checkpoint, by_name=False)
